@@ -37,6 +37,12 @@
         button:hover {
             background-color: #45a049;
         }
+        #details {
+            padding: 5px 10px;
+            font-size: 14px;
+            background-color: lightgrey;
+            color: black;
+        }
         .output {
             margin-top: 20px;
             overflow-x: auto;
@@ -64,16 +70,22 @@
     <h1>Matching API</h1>
     <p>Select an Excel file to upload and process:</p>
     <input type="file" id="fileInput" />
+    <p><small>Note: The Excel file should have 3 sheets: 1) Students' Preferences, 2) Faculty Preferences, and 3) Faculty Capacities.</small></p>
     <button id="runAlgorithm" disabled>Upload and Match</button>
 
     <!-- Results section hidden initially -->
     <div id="results" class="results-section">
-        <h2>Matched Results</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h2>Matched Results</h2>
+            <button id="details">Show Details</button>
+        </div>
+
         <table id="matchesTable">
             <thead>
             <tr>
                 <th>Faculty</th>
                 <th>Matched Students</th>
+                <th id="detailstable" style="display: none">Details</th>
             </tr>
             </thead>
             <tbody></tbody>
@@ -84,6 +96,17 @@
             <thead>
             <tr>
                 <th>Student</th>
+            </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <h2>Backup Assignments</h2>
+        <table id="backupsTable">
+            <thead>
+            <tr>
+                <th>Faculty</th>
+                <th>Backup Student</th>
             </tr>
             </thead>
             <tbody></tbody>

@@ -45,15 +45,19 @@ document.addEventListener('DOMContentLoaded', function() {
         const facultyPartners = Object.fromEntries(faculty.map(f => [f, []]));
         const studentPartners = Object.fromEntries(students.map(s => [s, null]));
 
+        const noMatches = []; // Separate list for students with no match
+
         while (unmatchedStudents.length > 0) {
             const student = unmatchedStudents.shift();
             const prefs = Object.entries(studentPreferences[student] || {}).sort((a, b) => a[1] - b[1]);
+            let matched = false; // Flag to track if the student has been matched
 
             for (const [faculty, _] of prefs) {
                 if (facultyPartners[faculty].length < facultyCapacities[faculty]) {
                     // Faculty has capacity; match student
                     facultyPartners[faculty].push(student);
                     studentPartners[student] = faculty;
+                    matched = true; // Mark as matched
                     break;
                 } else {
                     const currentStudents = facultyPartners[faculty];
@@ -92,14 +96,52 @@ document.addEventListener('DOMContentLoaded', function() {
                             studentPartners[leastPreferredStudent] = null;
                             unmatchedStudents.push(leastPreferredStudent);
                             studentPartners[student] = faculty;
+                            matched = true; // Mark as matched
                             break;
                         }
                     }
                 }
             }
+            // If no match was found for the current student, add to noMatches
+            if (!matched) {
+                noMatches.push(student); // Add unmatched student to the noMatches list
+            }
         }
 
-        return { studentPartners, facultyPartners };
+        // Assign backups only from the noMatches (unmatched students)
+        const backups = {};
+        let remainingUnmatchedStudents = [...noMatches]; // Ensure we work with the current unmatched students
+
+       // Go through each faculty and assign one unmatched student as a backup
+        for (const faculty of Object.keys(facultyPartners)) {
+            if (faculty && faculty.trim() !== '' && faculty !== 'undefined') {
+                let assignedBackup = null;
+
+                // Step 1: Unmatched students propose to the faculty based on faculty preferences
+                let sortedPreferredStudents = remainingUnmatchedStudents
+                    .filter(student => facultyPreferences[faculty]?.[student] !== undefined && !studentPartners[student])  // Ensure student is not matched
+                    .sort((a, b) => facultyPreferences[faculty][a] - facultyPreferences[faculty][b]);
+
+                // Step 2: If no faculty-preferred students are found, check student preferences for the faculty
+                if (sortedPreferredStudents.length === 0) {
+                    sortedPreferredStudents = remainingUnmatchedStudents
+                        .filter(student => studentPreferences[student]?.[faculty] !== undefined && !studentPartners[student])  // Ensure student is not matched
+                        .sort((a, b) => studentPreferences[a][faculty] - studentPreferences[b][faculty]);
+                }
+
+                // Step 3: Assign the best available unmatched student to the faculty
+                if (sortedPreferredStudents.length > 0) {
+                    assignedBackup = sortedPreferredStudents[0];
+                }
+
+                // If no student can be assigned, assign "None"
+                backups[faculty] = assignedBackup || "None";
+            }
+        }
+
+      // Return the final results with updated backups
+        return { studentPartners, facultyPartners, backups, noMatches };
+
     };
 
     document.getElementById('fileInput').addEventListener('change', async (e) => {
@@ -118,7 +160,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const students = Object.keys(studentPreferences);
         const faculty = Object.keys(facultyPreferences);
 
-        const { studentPartners, facultyPartners } = galeShapley(
+        const { studentPartners, facultyPartners, backups } = galeShapley(
             students,
             faculty,
             studentPreferences,
@@ -148,7 +190,78 @@ document.addEventListener('DOMContentLoaded', function() {
             row.insertCell(0).textContent = student;
         });
 
+        // Display backups
+        const backupsTable = document.getElementById('backupsTable').getElementsByTagName('tbody')[0];
+        backupsTable.innerHTML = '';
+
+        // Iterate over the backups object, ensuring no undefined faculty entries
+        for (const [faculty, backup] of Object.entries(backups)) {
+            if (faculty && faculty.trim() !== '' && faculty !== 'undefined') { // Check for valid and non-empty faculty
+                const row = backupsTable.insertRow();
+                row.insertCell(0).textContent = faculty;
+                row.insertCell(1).textContent = backup || "None";
+            } else {
+                console.log("Skipping invalid faculty:", faculty); // Log any invalid faculty names
+            }
+        }
+
         // Show the results section
         document.getElementById('results').style.display = 'block';
     });
+
+    document.getElementById('details').addEventListener('click', () => {
+        const detailsButton = document.getElementById('details');
+        const detailsColumn = document.getElementById('detailstable');
+
+        if (detailsButton.textContent === 'Show Details') {
+            detailsButton.textContent = 'Hide Details';
+            detailsColumn.style.display = 'table-cell';
+
+            // Get the matched results
+            const matchesTable = document.getElementById('matchesTable').getElementsByTagName('tbody')[0];
+            const studentPartners = {};
+            const facultyPartners = {};
+
+            // Reconstruct studentPartners and facultyPartners objects
+            for (const row of matchesTable.rows) {
+                const faculty = row.cells[0].textContent;
+                const students = row.cells[1].textContent.split(', ');
+                facultyPartners[faculty] = students;
+                for (const student of students) {
+                    studentPartners[student] = faculty;
+                }
+            }
+
+            // Add details column to matches table
+            for (const row of matchesTable.rows) {
+                if (row.cells.length < 3) {
+                    const detailsCell = row.insertCell(2);
+                    detailsCell.innerHTML = '';
+                    const faculty = row.cells[0].textContent;
+                    const students = row.cells[1].textContent.split(', ');
+                    for (const student of students) {
+                        const studentScore = studentPreferences[student][faculty];
+                        const facultyScore = facultyPreferences[faculty][student];
+                        const details = `${faculty}: ${facultyScore}<br>${student}: ${studentScore}`;
+                        const div = document.createElement('div');
+                        div.innerHTML = details; // Use innerHTML instead of textContent
+                        detailsCell.appendChild(div);
+                    }
+                }
+                row.cells[2].style.display = 'block';
+            }
+        } else {
+            detailsButton.textContent = 'Show Details';
+            detailsColumn.style.display = 'none';
+
+            // Hide details column
+            const matchesTable = document.getElementById('matchesTable').getElementsByTagName('tbody')[0];
+            for (const row of matchesTable.rows) {
+                if (row.cells.length > 2) {
+                    row.cells[2].style.display = 'none';
+                }
+            }
+        }
+    });
+
 });
